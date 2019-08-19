@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import datetime as dt
+from scipy.linalg import sqrtm
 from sklearn.decomposition import PCA
 
 
@@ -21,6 +22,7 @@ class RiskModelPCA:
         self._calc_factor_returns()
         self._calc_factor_cov_matrix()
         self._calc_idiosyncratic_var()
+        self._calc_matrices()
 
 
     def _fit_pca(self):
@@ -51,8 +53,34 @@ class RiskModelPCA:
                                                      columns=self.returns.columns)
         self.i_var_vector = pd.DataFrame(data=var_s, index=self.returns.columns)
 
-    def predict_portfolio_risk(self, weights):
-        weights = np.asarray(weights)
+    def _calc_matrices(self):
+        # we can remove any N by N calculations using the following
+        # common risk is usually h.T * B * F * B.T * h
+        # letting G = sqrt(F):  h.T * B * G*G * B.T * h
+        # letting Q.T = B * G and Q = G * B.T :  h.T * Q.T * Q * h
+        self.F = self.factor_cov_matrix
+        self.G = sqrtm(self.F)
+        self.B = self.factor_exposures
+        self.Q = self.G.dot(self.B.T)
+        # will use these to calculate risk in predict_portfolio_risk_opt
+
+    def predict_portfolio_risk(self, holdings):
+        holdings = np.asarray(holdings)
+        factor_var = np.add(self.B.dot(self.F.dot(self.B.T)), self.i_var_matrix)
+        result = holdings.T.dot(factor_var.dot(holdings))
+        return result
+
+    def predict_portfolio_risk_opt(self, holdings):
+        holdings = np.asarray(holdings)
+        R = np.matmul(self.Q, holdings)
+        common_risk = np.sum(R ** 2)
+        h2 = holdings ** 2
+        spec_risk = np.dot(h2, self.i_var_vector)
+        result = common_risk + spec_risk
+        return result[0]
+
+
+
 
 
 
