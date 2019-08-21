@@ -79,11 +79,6 @@ class RiskModelPCA:
         result = common_risk + spec_risk
         return result[0]
 
-
-
-
-
-
     @staticmethod
     def winz(x, a=-0.10, b=0.10):
         return np.where(x <= a, a, np.where(x >= b, b, x))
