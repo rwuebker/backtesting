@@ -6,7 +6,7 @@ import cvxpy as cvx
 class OptimalHoldingsCVX:
 
     def __init__(self, risk_model, alpha_vector, previous, risk_cap=0.05, factor_max=10.0, aum=50e6, lambda_reg=0.50,
-                 factor_min=-10.0, weights_max=0.01, weights_min=-0.01, risk_aversion=1.0e-6):
+                 factor_min=-10.0, weights_max=0.015, weights_min=-0.015, risk_aversion=1.0e-6):
 
         self.risk_model = risk_model
         self.alpha_vector = alpha_vector
@@ -38,8 +38,6 @@ class OptimalHoldingsCVX:
         print(prob.is_dcp())
         #av = -av
         self.h1 = h1
-        self.ivv = ivv
-        self.Q = Q
         #func = cvx.Minimize(av.T @ h1 + self.lambda_reg * cvx.norm(h1, 2))
         self.obj_func = func
 
@@ -68,7 +66,6 @@ class OptimalHoldingsCVX:
         return cvx.quad_form(f, X) + cvx.quad_form(h1, ivm)
 
     def find(self):
-        h1 = self.h1
         obj_func = self._get_obj()
         h1 = self.h1
         prob = cvx.Problem(self.obj_func, self._get_constraints())
