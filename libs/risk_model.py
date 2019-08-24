@@ -48,7 +48,7 @@ class RiskModelPCA:
     def _calc_idiosyncratic_var(self):
         common_returns = self.factor_returns.dot(self.factor_exposures.T)
         s = self.returns - common_returns
-        var_s = s.var(ddof=1) * self.ann_factor
+        var_s = np.var(s) * self.ann_factor
         self.i_var_matrix = pd.DataFrame(data=np.diag(var_s), index=self.returns.columns,
                                                      columns=self.returns.columns)
         self.i_var_vector = pd.DataFrame(data=var_s, index=self.returns.columns)
