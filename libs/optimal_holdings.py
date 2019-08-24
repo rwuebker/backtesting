@@ -5,82 +5,60 @@ import cvxpy as cvx
 
 class OptimalHoldingsCVX:
 
-    def __init__(self, risk_model, alpha_vector, previous, risk_cap=0.02, factor_max=10.0, aum=50e6, lambda_reg=0.50,
-                 factor_min=-10.0, weights_max=0.015, weights_min=-0.015, risk_aversion=1.0e-6):
+    def __init__(self, risk_model, alpha_vector, previous, risk_cap=0.05, factor_max=10.0, aum=50e6, lambda_reg=0.00,
+                 factor_min=-10.0, weights_max=0.55, weights_min=-0.55, risk_aversion=1.0e-6):
 
         self.risk_model = risk_model
         self.alpha_vector = alpha_vector
         self.previous = previous
-        self.risk_cap = risk_cap * aum
+        self.risk_cap = risk_cap
         self.factor_min = factor_min
         self.factor_max = factor_max
-        self.weights_min = weights_min * aum
-        self.weights_max = weights_max * aum
+        self.weights_min = weights_min
+        self.weights_max = weights_max
         self.risk_aversion = risk_aversion
         self.aum = aum
         self.lambda_reg = lambda_reg
 
-    def _get_obj(self):
-        start = time.time()
+    def _get_obj(self, h1):
         ra = self.risk_aversion
         Q = self.risk_model.Q # Q is k x N
         ivv = self.risk_model.i_var_vector
-        av = -self.alpha_vector.values.reshape(len(self.alpha_vector), 1)
-        h0 = self.previous.flatten()
-        lv = np.ones((len(av), 1)) * 0.1/2000000
-        h1 = cvx.Variable(len(self.alpha_vector))
-        m = ra * 0.50
-        #func = m * cvx.sum((Q @ h1)**2) + m * ((h1**2) @ ivv) - (h1 @ av) + ((h1-h0)**2) @ lv + self.lambda_reg * cvx.norm(h1, 2)
-        func = (h1 @ av) + self.lambda_reg * cvx.norm(h1, 2) + ((h1-h0)**2) @ lv
-        obj_func = cvx.Minimize(func)
-        self.is_dcp = cvx.Problem(obj_func, []).is_dcp()
-        print(self.is_dcp)
-        self.h1 = h1
-        self.obj_func = obj_func
-        end = time.time()
-        print('get_obj took: ', end-start)
-        return
+        av = -self.alpha_vector
+        #h0 = self.previous.flatten()
+        #lv = np.ones((len(av), 1)) * 0.1/2000000
+        #obj_func = cvx.Minimize(np.array(av.T) * h1 + self.lambda_reg * cvx.norm(h1, 2) + (h1-h0)**2 @ lv)
+        obj_func = cvx.Minimize(np.array(av.T) * h1 + self.lambda_reg * cvx.norm(h1, 2))
 
-    def _get_constraints(self):
-        start = time.time()
-        risk = self.get_risk()
+        return obj_func
+
+    def _get_constraints(self, h1, risk):
         c = []
-        h1 = self.h1
         factor_exposures = self.risk_model.factor_exposures
         c.append(risk <= self.risk_cap**2)
-        c.append(h1 <= self.weights_max)
-        c.append(h1 >= self.weights_min)
-        c.append(sum(h1) == 0)
         c.append(factor_exposures.T @ h1 <= self.factor_max)
         c.append(factor_exposures.T @ h1 >= self.factor_min)
-        c.append(sum(cvx.abs(h1)) <= self.aum)
-        end = time.time()
-        print('get_constraints took: ', end-start)
+        c.append(sum(h1) == 0)
+        c.append(sum(cvx.abs(h1)) <= 1.0)
+        c.append(h1 >= self.weights_min)
+        c.append(h1 <= self.weights_max)
         return c
 
-    def get_risk(self):
-        start = time.time()
-        Q = self.risk_model.Q
-        h1 = self.h1
-        ivv = self.risk_model.i_var_vector
-        #result = cvx.sum((Q @ h1)**2) + (h1**2) @ ivv
-        ivm = self.risk_model.i_var_matrix.values
-        f = self.risk_model.factor_exposures.T @ h1
+    def get_risk(self, h1):
+        av_index = self.alpha_vector.index
+        ivm = self.risk_model.i_var_matrix.loc[av_index].values
+        f = self.risk_model.factor_exposures.loc[av_index].values.T @ h1
         X = self.risk_model.factor_cov_matrix
-        end = time.time()
-        print('get_risk took: ', end-start)
-        #return result
-        return cvx.quad_form(f, X) + cvx.quad_form(h1, ivm)
+        risk = cvx.quad_form(f, X) + cvx.quad_form(h1, ivm)
+        return risk
 
     def find(self):
-        self._get_obj()
-        h1 = self.h1
-        prob = cvx.Problem(self.obj_func, self._get_constraints())
-        start = time.time()
-        print(prob.is_dcp())
-        prob.solve(max_iters=100, verbose=True, solver=cvx.SCS)
+        h1 = cvx.Variable(len(self.alpha_vector))
+        risk = self.get_risk(h1)
+        obj_func = self._get_obj(h1)
+        constraints = self._get_constraints(h1, risk)
+        prob = cvx.Problem(obj_func, constraints)
+        prob.solve(max_iters=100, verbose=True)
         optimal_weights = np.asarray(h1.value).flatten()
         df = pd.DataFrame(optimal_weights, index=self.alpha_vector.index)
-        end = time.time()
-        print('find took: ', end-start)
         return df
