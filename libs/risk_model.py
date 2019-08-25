@@ -70,11 +70,13 @@ class RiskModelPCA:
         result = holdings.T.dot(factor_var.dot(holdings))
         return result
 
-    def predict_portfolio_risk_opt(self, holdings):
-        holdings = np.asarray(holdings)
+    def predict_portfolio_risk_opt(self, holdings, gmv):
+        holdings = np.asarray(holdings) / gmv
         R = np.matmul(self.Q, holdings)
         common_risk = np.sum(R ** 2)
         h2 = holdings ** 2
+        print('this is h2.shape: ', h2.shape)
+        print('this is ivv.shape: ', self.i_var_vector.shape)
         spec_risk = np.dot(h2, self.i_var_vector)
         result = common_risk + spec_risk
         return result[0]
