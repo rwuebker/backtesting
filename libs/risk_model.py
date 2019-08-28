@@ -47,11 +47,17 @@ class RiskModelPCA:
 
     def _calc_idiosyncratic_var(self):
         common_returns = self.factor_returns.dot(self.factor_exposures.T)
+
         s = self.returns - common_returns
         var_s = np.var(s, ddof=1) * self.ann_factor
         self.i_var_matrix = pd.DataFrame(data=np.diag(var_s), index=self.returns.columns,
                                                      columns=self.returns.columns)
-        self.i_var_vector = pd.DataFrame(data=var_s, index=self.returns.columns)
+        self.i_var_vector = pd.Series(data=var_s, index=self.returns.columns, name='spec_var')
+        total_var = np.var(self.returns, ddof=1) * self.ann_factor
+        self.total_var = pd.Series(total_var, index=self.returns.columns, name='total_var')
+        common_return_var = np.var(common_returns, ddof=1) * self.ann_factor
+        self.common_return_var = pd.Series(common_return_var, index=self.returns.columns, name='common_var')
+
 
     def _calc_matrices(self):
         # we can remove any N by N calculations using the following
@@ -68,7 +74,7 @@ class RiskModelPCA:
         holdings = np.asarray(holdings)
         factor_var = np.add(self.B.dot(self.F.dot(self.B.T)), self.i_var_matrix)
         result = holdings.T.dot(factor_var.dot(holdings))
-        return result
+        return np.sqrt(result)
 
     def predict_portfolio_risk_opt(self, holdings, gmv):
         holdings = np.asarray(holdings) / gmv
@@ -79,7 +85,7 @@ class RiskModelPCA:
         print('this is ivv.shape: ', self.i_var_vector.shape)
         spec_risk = np.dot(h2, self.i_var_vector)
         result = common_risk + spec_risk
-        return result[0]
+        return np.sqrt(result[0])
 
     @staticmethod
     def winz(x, a=-0.10, b=0.10):
